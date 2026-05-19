@@ -2,7 +2,6 @@ import serial
 import requests
 import time
 
-# --- KONFIGURASI ---
 TELEGRAM_TOKEN = "8554238488:AAHSG68GHaRPmbcwm9ZHjJsxTH2sREpQeRA"
 CHAT_ID = "-5266286852"
 NATIVE_API_URL = "http://localhost/iot-security/api.php"
@@ -27,7 +26,6 @@ def send_telegram(message):
     except Exception as e:
         print(f"[TELEGRAM] Error: {e}")
 
-# Variabel untuk melacak status terakhir (mencegah banjir serial data)
 last_siaga_status = None
 last_reg_status = None
 
@@ -35,7 +33,6 @@ def run_bridge():
     global last_siaga_status, last_reg_status
     
     while True:
-        # 1. CEK DATA DARI HARDWARE (ARDUINO)
         if ser.in_waiting > 0:
             try:
                 line = ser.readline().decode('utf-8').strip()
@@ -43,7 +40,6 @@ def run_bridge():
                 
                 print(f"[HARDWARE] Data: {line}")
                 
-                # --- LOGIKA SCAN KARTU ---
                 if line.startswith("SCAN:"):
                     uid = line.split(":")[1].strip()
                     print(f"[PROCESS] Checking UID: {uid}")
@@ -72,7 +68,6 @@ def run_bridge():
                     except Exception as e:
                         print(f"[API ERROR] {e}")
 
-                # --- LOGIKA SENSOR MALING ---
                 elif line == "ALERT:MALING":
                     print("[⚠️ ALERT] PENYUSUP TERDETEKSI!")
                     send_telegram("🚨 *BAHAYA! PENYUSUP!*\nSensor mendeteksi pergerakan melewati pintu tanpa kartu sah!")
@@ -83,7 +78,7 @@ def run_bridge():
             except Exception as e:
                 print(f"[SERIAL ERROR] {e}")
 
-        # 2. SINKRONISASI STATUS DARI DASHBOARD KE HARDWARE
+       
         try:
             res = requests.get(f"{NATIVE_API_URL}?action=status", timeout=3)
             if res.status_code == 200:
@@ -91,7 +86,6 @@ def run_bridge():
                 current_siaga = data.get("mode_siaga", True)
                 current_reg = data.get("registration_mode", False)
 
-                # Kirim status SIAGA hanya jika berubah
                 if current_siaga != last_siaga_status:
                     if current_siaga:
                         ser.write(b"SIAGA_ON\n")
@@ -101,7 +95,6 @@ def run_bridge():
                         print("[SYSTEM] Mode Siaga: NON-AKTIF")
                     last_siaga_status = current_siaga
 
-                # Kirim status REGISTRASI hanya jika berubah
                 if current_reg != last_reg_status:
                     if current_reg:
                         ser.write(b"REG_ON\n")

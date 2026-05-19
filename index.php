@@ -1,7 +1,6 @@
 <?php
 require_once 'config.php';
 
-// --- LOGIKA PEMROSESAN DATA ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['toggle_siaga'])) {
         $conn->query("UPDATE system_status SET mode_siaga = NOT mode_siaga WHERE id = 1");
@@ -22,7 +21,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit();
 }
 
-// --- AMBIL DATA DARI DATABASE ---
 $statusRes = $conn->query("SELECT * FROM system_status WHERE id = 1");
 $status = $statusRes->fetch_assoc();
 $modeSiaga = $status['mode_siaga'] ?? 1;
