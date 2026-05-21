@@ -2,13 +2,13 @@ import serial
 import mysql.connector
 import requests
 import time
+import os
+from datetime import datetime
 
-# --- KONFIGURASI BOT TELEGRAM ---
 BOT_TOKEN = "8554238488:AAHSG68GHaRPmbcwm9ZHjJsxTH2sREpQeRA"
 CHAT_ID = "-5266286852"
 
-# --- KONFIGURASI SERIAL DATA KABEL ---
-SERIAL_PORT = 'COM4'  
+SERIAL_PORT = 'COM5'  
 BAUD_RATE = 9600
 
 db_config = {
@@ -18,9 +18,18 @@ db_config = {
     'database': 'security_db'
 }
 
+RESET = "\033[0m"
+BOLD = "\033[1m"
+MERAH = "\033[31m"
+HIJAU = "\033[32m"
+KUNING = "\033[33m"
+BIRU = "\033[34m"
+CYAN = "\033[36m"
+BG_MERAH = "\033[41m\033[37m"
+
 def kirim_notif_telegram(pesan):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": pesan}
+    payload = {"chat_id": CHAT_ID, "text": pesan, "parse_mode": "Markdown"}
     try:
         response = requests.post(url, json=payload)
         if response.status_code == 200:
@@ -30,119 +39,141 @@ def kirim_notif_telegram(pesan):
     except Exception as e:
         print(f"[TELEGRAM EROR]: Gagal terhubung ke Telegram ({e})")
 
-def verifikasi_dan_catat_kartu(uid_terscan):
-    try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
+def dapatkan_status_mode(cursor):
+    cursor.execute("SELECT secure_mode FROM settings WHERE id = 1")
+    row = cursor.fetchone()
+    return row[0] if row else 'secure'
 
-        # Ambil status mode sistem saat ini
-        cursor.execute("SELECT secure_mode FROM settings WHERE id = 1")
-        system_mode = cursor.fetchone()[0]
+def tampilkan_dashboard_terminal(mode, log_terakhir="Belum ada aktivitas baru"):
+    os.system('cls' if os.name == 'nt' else 'clear')
+    waktu_sekarang = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    print(f"{BIRU}{BOLD}======================================================={RESET}")
+    print(f"{BIRU}{BOLD}          SECUREDOOR - ENGINE GATEWAY CORE             {RESET}")
+    print(f"{BIRU}{BOLD}======================================================={RESET}")
+    print(f"{BOLD} Waktu Sistem : {RESET}{CYAN}{waktu_sekarang} WIB{RESET}")
+    
+    if mode == 'secure':
+        print(f"{BOLD} Status Mode  : {RESET}{HIJAU}{BOLD}[ 🔒 MODE AMAN - PROTEKSI PERIMETER AKTIF ]{RESET}")
+    else:
+        print(f"{BOLD} Status Mode  : {RESET}{KUNING}{BOLD}[ ⚡ MODE REGISTRASI - SIAP TERIMA KARTU ]{RESET}")
+        
+    print(f"{BIRU}-------------------------------------------------------{RESET}")
+    print(f"{BOLD} EVENT LOG TERAKHIR:{RESET}")
+    print(f" {log_terakhir}")
+    print(f"{BIRU}======================================================={RESET}")
+    print(f"{BOLD}Status:{RESET} Mendengarkan nirkabel HC-05 pada {KUNING}{SERIAL_PORT}{RESET}...")
 
-        # ----------------- LOGIKA REGISTRASI OTOMATIS INSTAN -----------------
-        if system_mode == 'register':
-            cursor.execute("SELECT owner_name FROM card_table WHERE card_uid = %s", (uid_terscan,))
-            existing = cursor.fetchone()
+def verifikasi_dan_catat_kartu(uid_terscan, system_mode, conn, cursor):
+    waktu_log = datetime.now().strftime('%H:%M:%S')
+    
+    if system_mode == 'register':
+        cursor.execute("SELECT owner_name FROM card_table WHERE card_uid = %s", (uid_terscan,))
+        existing = cursor.fetchone()
 
-            if not existing:
-                cursor.execute("INSERT INTO card_table (card_uid, owner_name) VALUES (%s, 'New User (Silakan Edit)')", (uid_terscan,))
-                cursor.execute("INSERT INTO access_log (card_uid, status, details) VALUES (%s, 'Owner', 'Kartu baru berhasil terdaftar otomatis lewat Mode Registrasi.')", (uid_terscan,))
-                conn.commit()
-                print(f"\n✨ [REGISTRASI OTOMATIS] Sukses mendaftarkan kartu baru! UID: {uid_terscan}")
-            else:
-                print(f"\nℹ️ [REGISTRASI] Kartu UID {uid_terscan} sudah terdaftar sebelumnya.")
-
-            arduino.write(b"REG_OK\n")
-
-        # ----------------- LOGIKA MODE AMAN (SECURE) -----------------
-        else:
-            cursor.execute("SELECT owner_name FROM card_table WHERE card_uid = %s", (uid_terscan,))
-            result = cursor.fetchone()
-
-            if result:
-                nama_pemilik = result[0]
-                print(f"\n========= [LOG AKSES: PEMILIK] =========")
-                print(f"| Status    : AKSES DITERIMA ✔️")
-                print(f"| Pemilik   : {nama_pemilik}")
-                print(f"| UID Kartu : {uid_terscan}")
-                print(f"========================================")
-                
-                cursor.execute("INSERT INTO access_log (card_uid, status, details) VALUES (%s, 'Owner', %s)", 
-                               (uid_terscan, f"Pemilik ({nama_pemilik}) telah membuka pintu."))
-                conn.commit()
-                arduino.write(b"ACC_OK\n")
-            else:
-                print(f"\n⚠️ [DETEKSI ANOMALI: KARTU ILEGAL] ⚠️")
-                print(f"========================================")
-                print(f"| Status    : AKSES DITOLAK ❌")
-                print(f"| UID       : {uid_terscan}")
-                print(f"========================================")
-                
-                cursor.execute("INSERT INTO access_log (card_uid, status, details) VALUES (%s, 'Access Denied', 'Mencoba membobol pintu menggunakan kartu ilegal.')", (uid_terscan,))
-                conn.commit()
-                arduino.write(b"ACC_DENIED\n")
-                
-                alert_msg = f"⚠️ SECUREDOOR WARNING! ⚠️\nTerdeteksi upaya akses menggunakan kartu ilegal.\nUID Kartu: {uid_terscan}"
-                # FIX: Typo nama fungsi diperbaiki di bawah ini
-                kirim_notif_telegram(alert_msg)
-
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        print(f"[DATABASE EROR]: Gagal verifikasi kartu ({e})")
-
-def tangani_maling():
-    try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT secure_mode FROM settings WHERE id = 1")
-        system_mode = cursor.fetchone()[0]
-
-        # Hanya catat maling dan kirim telegram jika website ada di SECURE MODE
-        if system_mode == 'secure':
-            print(f"\n🚨 [DETEKSI ANOMALI: MALING] 🚨")
-            print(f"========================================")
-            print(f"| Peringatan: SEORANG PENYUSUP TERDETEKSI!")
-            print(f"| Jarak     : < 5cm pada sensor Ultrasonik")
-            print(f"========================================")
-            
-            # Memasukkan log maling ke database
-            cursor.execute("INSERT INTO access_log (card_uid, status, details) VALUES ('-', 'Intruder!', 'Sensor perimeter SecureDoor mendeteksi pembobolan paksa!')")
+        if not existing:
+            cursor.execute("INSERT INTO card_table (card_uid, owner_name) VALUES (%s, 'New User (Silakan Edit)')", (uid_terscan,))
+            cursor.execute("INSERT INTO access_log (card_uid, status, details) VALUES (%s, 'Owner', 'Kartu baru terdaftar otomatis via Mode Registrasi.')", (uid_terscan,))
             conn.commit()
-            print("[DATABASE] Sukses memasukkan data penyusup ke access_log.")
-            
-            # Kirim Notifikasi Bahaya ke Telegram
-            breach_msg = "🚨🚨 SOS! MALING TERDETEKSI DI SECUREDOOR PINTU DEPAN! 🚨🚨\nAda objek mendekat tanpa verifikasi kartu RFID!"
-            kirim_notif_telegram(breach_msg)
+            arduino.write(b"REG_OK\n")
+            return f"{HIJAU}{BOLD}[{waktu_log}] Registrasi Sukses! Kartu Baru: {uid_terscan}{RESET}"
         else:
-            print(f"\n[INFO] Ultrasonik mendeteksi objek, dilewati karena sedang dalam Mode Registrasi.")
+            arduino.write(b"REG_OK\n")
+            return f"{KUNING}[{waktu_log}] Kartu UID {uid_terscan} sudah ada di database.{RESET}"
 
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        print(f"[DATABASE EROR]: Gagal mencatat data maling ({e})")
+    else:
+        cursor.execute("SELECT owner_name FROM card_table WHERE card_uid = %s", (uid_terscan,))
+        result = cursor.fetchone()
+
+        if result:
+            nama_pemilik = result[0]
+            cursor.execute("INSERT INTO access_log (card_uid, status, details) VALUES (%s, 'Owner', %s)", 
+                           (uid_terscan, f"Pemilik ({nama_pemilik}) telah membuka pintu."))
+            conn.commit()
+            arduino.write(b"ACC_OK\n")
+            return f"{HIJAU}[{waktu_log}] Akses Diterima: {nama_pemilik} ({uid_terscan}){RESET}"
+        else:
+            cursor.execute("INSERT INTO access_log (card_uid, status, details) VALUES (%s, 'Access Denied', 'Mencoba membobol pintu menggunakan kartu ilegal.')", (uid_terscan,))
+            conn.commit()
+            arduino.write(b"ACC_DENIED\n")
+            
+            waktu_jam = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            alert_msg = (
+                f"⚠️ *SECUREDOOR ANOMALI ALERT!* ⚠️\n"
+                f"───────────────────────\n"
+                f"🚫 *Status:* AKSES DITOLAK (KARTU ILEGAL)\n"
+                f"💳 *UID Kartu:* `{uid_terscan}`\n"
+                f"⏰ *Waktu Kejadian:* {waktu_jam} WIB\n"
+                f"📝 *Keterangan:* Ada seseorang mencoba membuka pintu paksa menggunakan kartu RFID tidak terdaftar!"
+            )
+            kirim_notif_telegram(alert_msg)
+            return f"{MERAH}{BOLD}[{waktu_log}] Akses Ditolak! Kartu Ilegal: {uid_terscan}{RESET}"
+
+def tangani_maling(system_mode, conn, cursor):
+    waktu_log = datetime.now().strftime('%H:%M:%S')
+    
+    if system_mode == 'secure':
+        cursor.execute("INSERT INTO access_log (card_uid, status, details) VALUES ('-', 'Intruder!', 'Sensor perimeter SecureDoor mendeteksi pembobolan paksa!')")
+        conn.commit()
+        
+        waktu_jam = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        breach_msg = (
+            f"🚨🚨 *SECURITY BREACH DETECTED* 🚨🚨\n"
+            f"⚠️ *PERGERAKAN ANOMALI TERDETEKSI* ⚠️\n"
+            f"───────────────────────\n"
+            f"👤 *Aktivitas:* Indikasi Penyusup / Pembobolan Paksa!\n"
+            f"📏 *Sensor Jarak:* Terdeteksi Objek < 5 cm (Sangat Dekat)\n"
+            f"⏰ *Waktu Kejadian:* {waktu_jam} WIB\n"
+            f"📢 *Aksi Sistem:* Alarm Fisik & LED Red Aktif Penuh!\n"
+            f"───────────────────────\n"
+            f"‼️ *Peringatan:* Mohon segera periksa CCTV perimeter atau lokasi rumah sekarang juga!"
+        )
+        kirim_notif_telegram(breach_msg)
+        return f"{BG_MERAH}{BOLD} ⚠️ [{waktu_log}] Terdeteksi Pergerakan Anomali! (Maling) {RESET}"
+    else:
+        return f"{KUNING}[{waktu_log}] Ultrasonik mendeteksi objek, diabaikan pada Mode Registrasi.{RESET}"
 
 if __name__ == '__main__':
-    print("======================================================")
-    print("       SECUREDOOR SYSTEM INTERFACE: ONLINE            ")
-    print("======================================================")
+    print("Menginisialisasi koneksi perangkat nirkabel...")
     try:
         arduino = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
         time.sleep(2)
-        print(f"[SISTEM] Hubungan serial di {SERIAL_PORT} sukses. Mendengarkan hardware...")
-        print("------------------------------------------------------")
         
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+        
+        log_status = f"{HIJAU}Sistem terhubung. Memulai pemantauan nirkabel...{RESET}"
+        waktu_terakhir_cek_mode = 0
+
         while True:
+            waktu_loop = time.time()
+            
+            if waktu_loop - waktu_terakhir_cek_mode > 1.0:
+                current_mode = dapatkan_status_mode(cursor)
+                tampilkan_dashboard_terminal(current_mode, log_status)
+                waktu_terakhir_cek_mode = waktu_loop
+            
             if arduino.in_waiting > 0:
-                raw_payload = arduino.readline().decode('utf-8').strip()
+                raw_payload = arduino.readline().decode('utf-8', errors='ignore').strip()
+                if not raw_payload:
+                    continue
                 
                 if raw_payload.startswith("SCAN:"):
-                    verifikasi_dan_catat_kartu(raw_payload.split(":")[1])
+                    uid_clean = raw_payload.split("SCAN:")[1].strip()
+                    log_status = verifikasi_dan_catat_kartu(uid_clean, current_mode, conn, cursor)
                     
                 elif raw_payload == "INTRUDER_DETECTED":
-                    tangani_maling()
+                    log_status = tangani_maling(current_mode, conn, cursor)
                     
-            time.sleep(0.1)
-    except Exception as err:
-        print(f"\n[KONEKSI SERIAL GAGAL]: {err}")
+            time.sleep(0.05)
+            
+    except serial.SerialException:
+        print(f"\n{MERAH}Eror: Gagal koneksi ke Bluetooth {SERIAL_PORT}. Pastikan HC-05 sudah menyala.{RESET}")
+    except mysql.connector.Error as err:
+        print(f"\n{MERAH}Eror Database: {err}{RESET}")
+    except KeyboardInterrupt:
+        print(f"\n{KUNING}Engine dihentikan manual.{RESET}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
