@@ -146,13 +146,13 @@ $secure_mode = $settings_row['secure_mode'];
                 <button type="submit" name="toggle_mode" class="btn btn-warning"><i class="fa-solid fa-plus"></i> Switch to Registration Mode</button>
                 
                 <div class="mode-instruction alert-secure">
-                    <strong>📌 SECURE MODE:</strong> Home security perimeter is fully active. The ultrasonic sensor constantly monitors structural distance. If any suspicious movement is detected without a verified RFID credential, the system triggers the local physical alarm and instantly broadcasts an emergency report to the Telegram channel.
+                    <strong> SECURE MODE:</strong> Home security perimeter is fully active. The ultrasonic sensor constantly monitors structural distance. If any suspicious movement is detected without a verified RFID credential, the system triggers the local physical alarm and instantly broadcasts an emergency report to the Telegram channel.
                 </div>
             <?php else: ?>
                 <button type="submit" name="toggle_mode" class="btn btn-danger"><i class="fa-solid fa-shield"></i> Restore to Secure Mode</button>
                 
                 <div class="mode-instruction alert-register">
-                    <strong>⚠️ REGISTRATION MODE:</strong> <i class="fa-solid fa-satellite-dish spin-icon"></i> This operation mode is dedicated to enrolling new keyholders. Ultrasonic perimeter scanning is temporarily bypassed. Tapping an unknown RFID card onto the hardware module will automatically register its UID into the authorization database. Ensure you return the system to Secure Mode immediately after enrollment.
+                    <strong> REGISTRATION MODE:</strong> <i class="fa-solid fa-satellite-dish spin-icon"></i> This operation mode is dedicated to enrolling new keyholders. Ultrasonic perimeter scanning is temporarily bypassed. Tapping an unknown RFID card onto the hardware module will automatically register its UID into the authorization database. Ensure you return the system to Secure Mode immediately after enrollment.
                 </div>
             <?php endif; ?>
         </form>

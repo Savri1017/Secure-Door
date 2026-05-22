@@ -39,7 +39,8 @@ def kirim_notif_telegram(pesan):
     except Exception as e:
         print(f"[TELEGRAM EROR]: Gagal terhubung ke Telegram ({e})")
 
-def dapatkan_status_mode(cursor):
+def dapatkan_status_mode(conn, cursor):
+    conn.commit()
     cursor.execute("SELECT secure_mode FROM settings WHERE id = 1")
     row = cursor.fetchone()
     return row[0] if row else 'secure'
@@ -144,12 +145,13 @@ if __name__ == '__main__':
         
         log_status = f"{HIJAU}Sistem terhubung. Memulai pemantauan nirkabel...{RESET}"
         waktu_terakhir_cek_mode = 0
+        current_mode = dapatkan_status_mode(conn, cursor)
 
         while True:
             waktu_loop = time.time()
             
             if waktu_loop - waktu_terakhir_cek_mode > 1.0:
-                current_mode = dapatkan_status_mode(cursor)
+                current_mode = dapatkan_status_mode(conn, cursor)
                 tampilkan_dashboard_terminal(current_mode, log_status)
                 waktu_terakhir_cek_mode = waktu_loop
             
@@ -158,14 +160,18 @@ if __name__ == '__main__':
                 if not raw_payload:
                     continue
                 
+                current_mode = dapatkan_status_mode(conn, cursor)
+                
                 if raw_payload.startswith("SCAN:"):
                     uid_clean = raw_payload.split("SCAN:")[1].strip()
                     log_status = verifikasi_dan_catat_kartu(uid_clean, current_mode, conn, cursor)
+                    tampilkan_dashboard_terminal(current_mode, log_status)
                     
                 elif raw_payload == "INTRUDER_DETECTED":
                     log_status = tangani_maling(current_mode, conn, cursor)
+                    tampilkan_dashboard_terminal(current_mode, log_status)
                     
-            time.sleep(0.05)
+            time.sleep(0.01)
             
     except serial.SerialException:
         print(f"\n{MERAH}Eror: Gagal koneksi ke Bluetooth {SERIAL_PORT}. Pastikan HC-05 sudah menyala.{RESET}")
