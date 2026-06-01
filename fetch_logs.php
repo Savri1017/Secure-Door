@@ -1,27 +1,37 @@
 <?php
 include 'connection.php';
 
-$log_query = mysqli_query($conn, "SELECT * FROM access_log ORDER BY timestamp DESC LIMIT 25");
+$query = "SELECT * FROM access_log ORDER BY timestamp DESC"; 
+$result = mysqli_query($conn, $query);
 
-if(mysqli_num_rows($log_query) > 0){
-    while($row = mysqli_fetch_assoc($log_query)){
-        $badge = "";
-        if($row['status'] == 'Intruder!') {
-            $badge = "<span class='badge bg-danger'><i class='fa-solid fa-shield-virus'></i> Penyusup</span>";
-        } elseif ($row['status'] == 'Access Denied') {
-            $badge = "<span class='badge bg-warning'><i class='fa-solid fa-ban'></i> Ditolak</span>";
-        } else {
-            $badge = "<span class='badge bg-success'><i class='fa-solid fa-user-shield'></i> Terverifikasi</span>";
-        }
+if ($result && mysqli_num_rows($result) > 0) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $status = $row['status'];
+        $badge_class = 'badge-secondary';
         
+        if (strpos(strtolower($status), 'verifikasi') !== false) { 
+            $badge_class = 'badge-success'; 
+        } elseif (strpos(strtolower($status), 'tolak') !== false) { 
+            $badge_class = 'badge-warning'; 
+        } elseif (strpos(strtolower($status), 'susup') !== false || strpos(strtolower($status), 'nyusup') !== false) { 
+            $badge_class = 'badge-danger'; 
+        }
+
         echo "<tr>";
-        echo "<td style='color: #64748b; font-weight: 600;'><i class='fa-regular fa-clock' style='margin-right: 6px; opacity:0.7;'></i> ".$row['timestamp']."</td>";
-        echo "<td><code style='color: #0f172a; font-weight: 700; background: #f1f5f9; padding: 4px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px;'>".$row['card_uid']."</code></td>";
-        echo "<td>".$badge."</td>";
-        echo "<td><span style='color: #1e293b; font-weight: 600;'>".$row['details']."</span></td>";
+        echo "<td>" . $row['timestamp'] . "</td>";
+        
+        echo "<td><span class='uid-tag'>" . $row['card_uid'] . "</span></td>";
+        
+        echo "<td><span class='badge " . $badge_class . "'>" . $status . "</span></td>";
+        echo "<td>" . $row['details'] . "</td>";
+        echo "<td style='text-align:center;'>";
+        echo "<button class='btn-delete' onclick='confirmDelete(" . $row['id'] . ")'>";
+        echo "<i class='fa-solid fa-trash'></i> Hapus";
+        echo "</button>";
+        echo "</td>";
         echo "</tr>";
     }
 } else {
-    echo "<tr><td colspan='4' style='text-align:center; color: #94a3b8; padding: 40px;'><i class='fa-solid fa-database' style='font-size: 20px; display:block; margin-bottom:10px; opacity:0.5;'></i> Kamar log kosong. Tidak ada data terdeteksi.</td></tr>";
+    echo "<tr><td colspan='5' style='text-align:center; color:var(--text-card-p);'>Belum ada data log aktivitas.</td></tr>";
 }
 ?>
